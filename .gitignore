@@ -3,4 +3,7 @@
 __pycache__/
 *.pyc
 data/
+corpus.json
 Thumbs.db
+tempCodeRunnerFile.py
+.dist/
