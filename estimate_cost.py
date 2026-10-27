@@ -4,7 +4,7 @@ import tiktoken
 from config import EMBED_MODEL
 from corpus import load_corpus
 
-RATE_PER_1M_TOKENS = 0.02  # USD for text-embedding-3-small (confirmed on the OpenAI pricing page)
+RATE_PER_1M_TOKENS = 0.02  # USD for text-embedding-3-small
 
 
 def main():
