@@ -1,5 +1,5 @@
 from datasets import load_dataset
-from retrieval import search_qdrant
+from retrieval import hybrid_search
 
 def recall_at_k(gold_titles, retrieved_titles):
         return len(gold_titles & set(retrieved_titles)) / len(gold_titles)
@@ -12,7 +12,7 @@ def reciprocal_rank(gold_titles, retrieved_titles):
     return 0.0
         
 
-def build_eval_set(n=8):
+def build_eval_set(n=40):
 
     data = load_dataset("hotpotqa/hotpot_qa", "distractor", split="validation", streaming=True).take(n)
     gold_list =[]
@@ -29,7 +29,7 @@ def run_eval(k=5):
     rrs = []
     eval_set = build_eval_set()
     for item in eval_set:
-        hits = search_qdrant(item["question"], k)
+        hits = hybrid_search(item["question"], k=k)
         retrieved_titles = [hit.payload["title"] for hit in hits]
         recalls.append(recall_at_k(item["gold_titles"], retrieved_titles))
         rrs.append(reciprocal_rank(item["gold_titles"], retrieved_titles))
@@ -40,3 +40,7 @@ def run_eval(k=5):
 
     print("Avg recall: ", sum(recalls)/len(recalls))
     print("MRR: ", sum(rrs)/len(rrs) )
+
+
+if __name__ == "__main__":
+    run_eval()

@@ -9,7 +9,7 @@ RATE_PER_1M_TOKENS = 0.02  # USD for text-embedding-3-small
 
 def main():
     corpus = load_corpus()
-    encoding = tiktoken.encoding_for_model(EMBED_MODEL)  # build the encoding once, then reuse it
+    encoding = tiktoken.encoding_for_model(EMBED_MODEL) 
     total_tokens = sum(len(encoding.encode(text)) for text in corpus.values())
     cost = total_tokens / 1_000_000 * RATE_PER_1M_TOKENS
     print(f"Paragraphs:     {len(corpus)}")

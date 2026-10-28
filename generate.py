@@ -1,46 +1,96 @@
-from retrieval import search_qdrant
+from retrieval import hybrid_search
 from embeddings import client
 from config import CHAT_MODEL
 import openai
 from usage import record
+import json
 
 
 #system prompt
-SYSTEM_PROMPT = ("Use ONLY the provided documents. Do not use any prior or outside knowledge. "
-                "If the answer is not in the documents, you do not know it , "
-                "even if you believe you know it. Cite every document you used, by number, e.g. [1][3],"
-                " IF the answer is not in the PROVIDED DOCUMENTS, state that the information is insufficient,"
-                " and do NOT fabricate answer or use any prior or outside knowledge other than the provided documents.")
+SYSTEM_PROMPT = ("To answer the provided question use the search tool provided."
+" If information gathered by the search tool is not enough, search again with a more specific query. "
+"Answer only based on the documents retrieved with the search tool, If the answer is not in the documents, "
+"you do not know it , even if you believe you know it. Cite every document you used, by number, e.g. [1][3]. "
+"Do NOT fabricate answer or use any prior or outside knowledge other than the provided documents.")
 
-def build_context(hits):
+
+# 1. Define a list of callable tools for the model
+tools = [
+    {
+        "type": "function",
+        "function": { "name": "search_documents",
+        "description": "Search the knowledge base for information",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "Search query",
+                },
+            },
+            "required": ["question"], },
+        },
+    },
+]
+
+max_iterations = 3
+
+def search_documents(question, start):
+   hits = hybrid_search(question)
+   if hits is None:
+      context = "Search failed"
+      return context, []
+   context = build_context(hits, start)
+   return context, hits
+   
+
+def build_context(hits, offset):
     context = []
-    for i, hit in enumerate(hits, start =1):
+    for i, hit in enumerate(hits, start = offset):
       chunk = f"[{i}] Title: {hit.payload['title']}\n {hit.payload['text']}"
       context.append(chunk)
     return "\n\n".join(context)
                                 
 
 def answer(question):
-    points  = search_qdrant(question) 
-    if points is None:
-       return ("Couldn't retrieve documents, please try again.", [])
-               
-    context = build_context(points)
-    user_msg = f"Retrieved information: {context}\n\nQuestion: {question}"
 
     messages = [
     {"role": "system", "content": SYSTEM_PROMPT},  
-    {"role": "user", "content": user_msg},   
+    {"role": "user", "content": question},   
     ]
-    try:  
-      resp = client.chat.completions.create(model=CHAT_MODEL, messages=messages, reasoning_effort="none")   
-      answer_text = resp.choices[0].message.content
-      record(resp.usage)
-    except openai.OpenAIError as e:
-       print(str(e))
-       return("The answer could not be generated. Please try again.", points)
-
-    return answer_text, points
+    all_hits = []
+    for i in range(max_iterations):
+          try:  
+                resp = client.chat.completions.create(model=CHAT_MODEL, messages=messages, reasoning_effort="none", tools=tools) 
+                print(f"--- Round {i+1}, finish_reason: {resp.choices[0].finish_reason}")  
+                if resp.choices[0].finish_reason == "tool_calls": 
+                  response = resp.choices[0].message
+                  tool_calls = resp.choices[0].message.tool_calls[0]
+                  tool_call_id = tool_calls.id 
+                  question = json.loads(tool_calls.function.arguments)["question"]  
+                  print(f"    Tool query: {question}")
+                  context_string, hits = search_documents(question, len(all_hits) + 1) 
+                  all_hits.extend(hits)
+                  messages.append(response)
+                  messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": context_string})  
+                elif resp.choices[0].finish_reason == "stop":
+                  print("--- LLM done, generating answer")
+                  break
+          except openai.OpenAIError as e:
+            print(str(e))
+            return("The answer could not be generated. Please try again.", all_hits)
+    if resp.choices[0].finish_reason != "stop":
+      try:
+        resp1 = client.chat.completions.create(model=CHAT_MODEL, messages=messages, reasoning_effort="none")
+        answer_text = resp1.choices[0].message.content
+        record(resp1.usage)
+        return answer_text, all_hits
+      except openai.OpenAIError as e:
+         print(str(e))
+         return("The answer could not be generated. Please try again.", all_hits)
+    answer_text = resp.choices[0].message.content
+    record(resp.usage)
+    return answer_text, all_hits
 
 if __name__ == "__main__":
     while True:
