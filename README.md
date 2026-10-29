@@ -1,6 +1,6 @@
 # AI Investigation Engine
 
-A RAG (Retrieval-Augmented Generation) system that searches a large corpus of 66,000+ documents, combines facts across multiple documents, cites evidence, detects contradictions, and refuses when information is missing.
+A RAG (Retrieval-Augmented Generation) system that searches a large knowledge base of 66,000+ documents, combines facts across multiple documents, cites evidence, and refuses when information is missing.
 
 **Demo:** https://appliedaitask.streamlit.app
 
