@@ -7,8 +7,6 @@ from dotenv import load_dotenv
 load_dotenv()  # read .env into the environment (a no-op in deployment, where the host sets real env vars)
 
 # External services 
-# OPENAI_API_KEY is read directly from the environment by the OpenAI() client, so it is
-# not re-exported here. Qdrant credentials must be passed explicitly, so we expose them.
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
@@ -26,3 +24,13 @@ CORPUS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "corpus.j
 # Batch sizes for the one-time ingestion (tune in ingest.py)
 EMBED_BATCH = 100   # paragraphs per OpenAI embeddings request
                     # and points per Qdrant upsert request
+
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 100
+MIN_CHUNK_LEN = 20
+MAX_TOOL_ROUNDS = 3
+DENSE_POOL_K = 100
+RRF_K = 60
+
+PAR_COLLECTION = "hotpotqa_paragraphs"
+FIXED_COLLECTION = "hotpotqa_fixed_chunks"

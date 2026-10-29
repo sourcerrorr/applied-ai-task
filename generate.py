@@ -4,14 +4,19 @@ from config import CHAT_MODEL
 import openai
 from usage import record
 import json
+from config import MAX_TOOL_ROUNDS, COLLECTION_NAME
 
 
 #system prompt
-SYSTEM_PROMPT = ("To answer the provided question use the search tool provided."
-" If information gathered by the search tool is not enough, search again with a more specific query. "
-"Answer only based on the documents retrieved with the search tool, If the answer is not in the documents, "
-"you do not know it , even if you believe you know it. Cite every document you used, by number, e.g. [1][3]. "
-"Do NOT fabricate answer or use any prior or outside knowledge other than the provided documents.")
+SYSTEM_PROMPT = ("To answer the provided question use the search tool provided. "
+"If information gathered by the search tool is not enough, search again with a more specific query."
+" Answer only based on the documents retrieved with the search tool."
+" If the answer is not in the documents, you do not know it, even if you believe you know it. "
+"Cite every document you used, by number, e.g. [1][3]."
+" Do NOT fabricate answers or use any prior or outside knowledge other than the provided documents. "
+"If the retrieved documents contain conflicting information about the same fact, you MUST report all conflicting versions"
+" explicitly and NEVER silently pick one. State: 'Source [X] says A, but source [Y] says B - these conflict.'"
+" The documents may contain errors. Your job is to report what the documents say, not decide which is correct.")
 
 
 # 1. Define a list of callable tools for the model
@@ -33,10 +38,10 @@ tools = [
     },
 ]
 
-max_iterations = 3
+max_iterations = MAX_TOOL_ROUNDS
 
-def search_documents(question, start):
-   hits = hybrid_search(question)
+def search_documents(question, start, collection_name=COLLECTION_NAME):
+   hits = hybrid_search(question, collection_name=collection_name)
    if hits is None:
       context = "Search failed"
       return context, []
@@ -47,12 +52,12 @@ def search_documents(question, start):
 def build_context(hits, offset):
     context = []
     for i, hit in enumerate(hits, start = offset):
-      chunk = f"[{i}] Title: {hit.payload['title']}\n {hit.payload['text']}"
+      chunk = f"[{i}] Title: {hit.payload.get('title', hit.payload.get('name', ''))}\n {hit.payload['text']}"
       context.append(chunk)
     return "\n\n".join(context)
                                 
 
-def answer(question):
+def answer(question, collection_name=COLLECTION_NAME):
 
     messages = [
     {"role": "system", "content": SYSTEM_PROMPT},  
@@ -62,19 +67,17 @@ def answer(question):
     for i in range(max_iterations):
           try:  
                 resp = client.chat.completions.create(model=CHAT_MODEL, messages=messages, reasoning_effort="none", tools=tools) 
-                print(f"--- Round {i+1}, finish_reason: {resp.choices[0].finish_reason}")  
-                if resp.choices[0].finish_reason == "tool_calls": 
+                if resp.choices[0].finish_reason == "tool_calls":
+                  record(resp.usage)
                   response = resp.choices[0].message
                   tool_calls = resp.choices[0].message.tool_calls[0]
                   tool_call_id = tool_calls.id 
                   question = json.loads(tool_calls.function.arguments)["question"]  
-                  print(f"    Tool query: {question}")
-                  context_string, hits = search_documents(question, len(all_hits) + 1) 
+                  context_string, hits = search_documents(question, len(all_hits) + 1, collection_name=collection_name) 
                   all_hits.extend(hits)
                   messages.append(response)
                   messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": context_string})  
                 elif resp.choices[0].finish_reason == "stop":
-                  print("--- LLM done, generating answer")
                   break
           except openai.OpenAIError as e:
             print(str(e))
@@ -100,4 +103,4 @@ if __name__ == "__main__":
       text, pts = answer(q)
       print(text)
       for i, point in enumerate(pts, start = 1):
-         print(f"[{i}], [{point.payload['title']}]")
+         print(f"[{i}], [{point.payload.get('title', point.payload.get('name', ''))}]")

@@ -1,8 +1,9 @@
 import pytest
 from retrieval import rrf, tokenize
 from generate import build_context
-from eval_test import recall_at_k, reciprocal_rank
+from eval_test import recall_at_k, reciprocal_rank, token_f1, citation_accuracy
 from usage import record, get_totals, _totals
+from documents import chunk_text
 
 
 class FakeHit:
@@ -98,3 +99,108 @@ def test_record_and_totals():
     assert totals["input_tokens"] == 100
     assert totals["output_tokens"] == 50
     assert totals["query_n"] == 1
+
+
+# chunk_text — fixed strategy
+
+def test_fixed_splits_long_text():
+    """Text longer than CHUNK_SIZE (500) should produce multiple chunks."""
+    text = "a" * 1000
+    chunks = chunk_text(text, "fixed")
+    assert len(chunks) > 1
+
+def test_fixed_short_text_single_chunk():
+    """Text shorter than CHUNK_SIZE stays as one chunk."""
+    text = "a" * 30
+    chunks = chunk_text(text, "fixed")
+    assert len(chunks) == 1
+
+def test_fixed_filters_tiny_remainder():
+    """A trailing fragment shorter than MIN_CHUNK_LEN (20) is dropped."""
+    text = "a" * 510
+    chunks = chunk_text(text, "fixed")
+    for chunk in chunks:
+        assert len(chunk) >= 20
+
+def test_fixed_overlap():
+    """Consecutive chunks overlap — the end of chunk 1 matches the start of chunk 2."""
+    text = "abcdefghij" * 100  # 1000 chars of repeating pattern
+    chunks = chunk_text(text, "fixed")
+    assert len(chunks) >= 2
+    chunk1_tail = chunks[0][-100:]  # last 100 chars (CHUNK_OVERLAP)
+    chunk2_head = chunks[1][:100:]  # first 100 chars
+    assert chunk1_tail == chunk2_head
+
+
+# chunk_text — paragraph strategy
+
+def test_paragraph_splits_on_double_newline():
+    """Text with \\n\\n paragraph breaks splits at those boundaries."""
+    text = ("First paragraph with enough text." + "\n\n" +
+            "Second paragraph with enough text." + "\n\n" +
+            "Third paragraph with enough text.")
+    chunks = chunk_text(text, "paragraph")
+    assert len(chunks) == 3
+
+def test_paragraph_fallback_no_breaks():
+    """Without \\n\\n, paragraph strategy falls back to fixed-size chunking."""
+    text = "a" * 1000  # no paragraph breaks
+    chunks = chunk_text(text, "paragraph")
+    assert len(chunks) > 1  # fell back to fixed, split the text
+
+def test_paragraph_fallback_oversized():
+    """If any paragraph exceeds CHUNK_SIZE * 2 (1000), falls back to fixed."""
+    text = ("Short paragraph here." + "\n\n" +
+            "x" * 1200)  # one paragraph way too long
+    chunks = chunk_text(text, "paragraph")
+    # fallback to fixed means chunks are ~500 chars, not one 1200-char chunk
+    assert all(len(c) <= 500 for c in chunks)
+
+def test_paragraph_filters_tiny():
+    """Paragraphs shorter than MIN_CHUNK_LEN (20) are dropped."""
+    text = ("ok" + "\n\n" +
+            "This paragraph is long enough to keep.")
+    chunks = chunk_text(text, "paragraph")
+    assert len(chunks) == 1
+    assert "long enough" in chunks[0]
+
+def test_crlf_normalized():
+    """Windows \\r\\n line endings are converted to \\n before chunking."""
+    text = ("First paragraph here." + "\r\n\r\n" +
+            "Second paragraph here.")
+    chunks = chunk_text(text, "paragraph")
+    assert len(chunks) == 2
+
+
+# token_f1
+
+def test_token_f1_perfect():
+    """Identical text gives F1 = 1.0."""
+    assert token_f1("the cat sat", "the cat sat") == 1.0
+
+def test_token_f1_partial():
+    """Partial overlap gives a score between 0 and 1."""
+    score = token_f1("the cat sat on mat", "the cat")
+    assert 0 < score < 1
+
+def test_token_f1_no_overlap():
+    """No shared tokens gives 0."""
+    assert token_f1("hello world", "foo bar") == 0.0
+
+
+# citation_accuracy
+
+def test_citation_accuracy_all_correct():
+    """All cited sources are in gold titles."""
+    hits = [FakeHit(1, "Doc A", "text"), FakeHit(2, "Doc B", "text")]
+    assert citation_accuracy("[1] and [2]", hits, {"Doc A", "Doc B"}) == 1.0
+
+def test_citation_accuracy_half_correct():
+    """One of two citations is correct."""
+    hits = [FakeHit(1, "Doc A", "text"), FakeHit(2, "Doc B", "text")]
+    assert citation_accuracy("[1] and [2]", hits, {"Doc A"}) == 0.5
+
+def test_citation_accuracy_no_citations():
+    """No [n] citations in the answer gives 0."""
+    hits = [FakeHit(1, "Doc A", "text")]
+    assert citation_accuracy("No citations here", hits, {"Doc A"}) == 0.0

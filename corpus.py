@@ -23,7 +23,7 @@ def build_corpus():
     for item in data:
         context = item["context"]
         for title, sentences in zip(context["title"], context["sentences"]):
-            text = "".join(sentences)      # merge the sentence fragments into one paragraph
+            text = " ".join(sentences)      # merge the sentence fragments into one paragraph
             text = " ".join(text.split())  # normalize whitespace (\xa0 -> space, collapse runs)
             corpus[title] = text
     return corpus

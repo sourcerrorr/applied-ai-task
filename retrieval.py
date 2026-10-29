@@ -1,29 +1,29 @@
 from embeddings import embed_texts
 from vectordb import client
-from config import COLLECTION_NAME
-import openai
+from config import COLLECTION_NAME, DENSE_POOL_K, RRF_K
 from qdrant_client.http.exceptions import ApiException, ResponseHandlingException 
 from rank_bm25 import BM25Okapi
 import re
+import openai
 
 
 def tokenize(text):
 
     return re.findall(r"\w+", text.lower())
 
-def rrf(dense_ids, bm25_ids, k=60):
+def rrf(dense_ids, bm25_ids, k=RRF_K):
     dense_rank = {doc_id: i for i, doc_id in enumerate(dense_ids, start=1)}
     bm25_rank  = {doc_id: i for i, doc_id in enumerate(bm25_ids, start=1)}
     scores = {doc_id: 1/(k + dense_rank[doc_id]) + 1/(k + bm25_rank[doc_id]) for doc_id in dense_rank}
     return sorted(scores, key=scores.get, reverse=True)
 
-def hybrid_search(question, pool_k=100, k=5):
-    qdrant_result = search_qdrant(question, pool_k)
+def hybrid_search(question, pool_k=DENSE_POOL_K, k=5, collection_name=COLLECTION_NAME):
+    qdrant_result = search_qdrant(question, pool_k, collection_name=collection_name)
 
     if qdrant_result is None:
         return None
 
-    tokenized_docs = [tokenize(h.payload['title'] + " " + h.payload['text']) for h in qdrant_result]
+    tokenized_docs = [tokenize(h.payload.get('title', h.payload.get('name', '')) + " " + h.payload['text']) for h in qdrant_result]
     bm25 = BM25Okapi(tokenized_docs)
     query_tokens = tokenize(question)
     scores = bm25.get_scores(query_tokens)
@@ -44,7 +44,7 @@ def main():
     question = input("Enter question: ")
     hits = hybrid_search(question)
     for hit in hits:
-        print(f"Title: {hit.payload['title']}")
+        print(f"Title: {hit.payload.get('title', hit.payload.get('name', ''))}")
 
 
 def embed_question(question: str):
@@ -56,14 +56,14 @@ def embed_question(question: str):
         return None
     return result
 
-def search_qdrant(question, k=5):
+def search_qdrant(question, k=5, collection_name=COLLECTION_NAME):
     query_vector = embed_question(question)
     if query_vector is None:
         return None
     else:
         try:
             response = client.query_points(
-                collection_name=COLLECTION_NAME,
+                collection_name=collection_name,
                 query = query_vector,
                 limit = k,
                 with_payload = True

@@ -15,8 +15,10 @@ def main():
         chunk_embed = embed_texts(chunk)
         points = []
         for j, vector in enumerate(chunk_embed):
-            points.append(PointStruct(id=start + j, vector=vector, payload={"title": titles[start + j], 
-                                                                              "text": texts[start + j]}))
+            points.append(PointStruct(id=start + j, vector=vector, payload={"source": "hotpotqa",
+                                                                            "title": titles[start + j], 
+                                                                            "text": texts[start + j]}
+                                                                              ))
         upsert_points(points) 
         print(f"embedded and stored {start+len(chunk)} / {len(texts)}") 
 
