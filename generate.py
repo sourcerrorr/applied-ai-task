@@ -88,6 +88,7 @@ def answer(question, collection_name=COLLECTION_NAME):
                 elif resp.choices[0].finish_reason == "stop":
                   break
                 else:
+                  record(resp.usage)
                   break
           except openai.OpenAIError as e:
             print(str(e))
