@@ -150,6 +150,17 @@ See [EVALUATION.md](EVALUATION.md) for full results, analysis, and failure cases
 - **Free-tier sleep** — Streamlit Community Cloud sleeps after ~12h of inactivity.
 - **Usage tracking resets on restart** — token counts are in-memory.
 
+## Deployment Limits
+
+| Service | Free Tier Limits |
+|---|---|
+| Streamlit Community Cloud | 1 GB RAM, app sleeps after 12h inactivity, US-hosted |
+| Qdrant Cloud | 1 GB RAM, 0.5 vCPU, 4 GB disk storage, 1 cluster |
+
+These limits do not block core feature demos. 
+Although, latency is affected as Streamlit is US-hosted while Qdrant is EU-hosted.
+After 12h of inactivity, the first request takes ~30 seconds while the app wakes up.
+
 ## Project Structure
 
 ```
