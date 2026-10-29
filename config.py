@@ -4,7 +4,7 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv()  # read .env into the environment (a no-op in deployment, where the host sets real env vars)
+load_dotenv()  # read .env into the environment 
 
 # External services 
 QDRANT_URL = os.getenv("QDRANT_URL")

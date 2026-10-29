@@ -8,16 +8,18 @@ import openai
 
 
 def tokenize(text):
-
+    """Split text into lowercase words, stripping punctuation."""
     return re.findall(r"\w+", text.lower())
 
 def rrf(dense_ids, bm25_ids, k=RRF_K):
+    """Fuse two ranked ID lists using Reciprocal Rank Fusion. Returns IDs sorted by combined score."""
     dense_rank = {doc_id: i for i, doc_id in enumerate(dense_ids, start=1)}
     bm25_rank  = {doc_id: i for i, doc_id in enumerate(bm25_ids, start=1)}
     scores = {doc_id: 1/(k + dense_rank[doc_id]) + 1/(k + bm25_rank[doc_id]) for doc_id in dense_rank}
     return sorted(scores, key=scores.get, reverse=True)
 
 def hybrid_search(question, pool_k=DENSE_POOL_K, k=5, collection_name=COLLECTION_NAME):
+    """Run dense search, re-rank with BM25, fuse with RRF, return top-k hits."""
     qdrant_result = search_qdrant(question, pool_k, collection_name=collection_name)
 
     if qdrant_result is None:
@@ -48,7 +50,7 @@ def main():
 
 
 def embed_question(question: str):
-
+    """Embed a single question string into a vector. Returns None on API error."""
     try:
         result = embed_texts([question])[0]
     except openai.OpenAIError as e: 
@@ -57,6 +59,7 @@ def embed_question(question: str):
     return result
 
 def search_qdrant(question, k=5, collection_name=COLLECTION_NAME):
+    """Embed the question and query Qdrant for the top-k nearest hits. Returns None on error."""
     query_vector = embed_question(question)
     if query_vector is None:
         return None

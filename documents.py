@@ -14,7 +14,7 @@ from config import CHUNK_SIZE, CHUNK_OVERLAP, MIN_CHUNK_LEN
 
 
 def extract_txt(file):
-
+    """Read a .txt file and return its text and metadata (line count)."""
     file.seek(0)
     file_content = file.read().decode("utf-8")
     line_count = file_content.count("\n") + 1
@@ -22,7 +22,7 @@ def extract_txt(file):
     return file_content, metadata
 
 def extract_pdf(file):
-
+    """Read a .pdf file and return its text and metadata (page count)."""
     file.seek(0)
     reader = PdfReader(file)
     pages = reader.pages
@@ -38,7 +38,7 @@ def extract_pdf(file):
 
 
 def extract_docx(file):
-
+    """Read a .docx file and return its text and metadata (paragraph count)."""
     file.seek(0)
     doc = Document(file)
     pars = doc.paragraphs
@@ -61,7 +61,7 @@ handlers = {
 }
 
 def extract_text(file, filename):
-    
+    """Call the right extractor based on file extension. Returns (text, metadata)."""
     file_type = os.path.splitext(filename)[1]
     if file_type not in handlers:
         raise ValueError("Unsupported file type: " + file_type)
@@ -70,7 +70,7 @@ def extract_text(file, filename):
     return file_content
 
 def chunk_text(text, strategy):
-    
+    """Split text into chunks using 'paragraph' or 'fixed' strategy. Returns list of strings."""
     chunk_size = CHUNK_SIZE
     overlap = CHUNK_OVERLAP
     chunks = []
@@ -93,7 +93,7 @@ def chunk_text(text, strategy):
 
 
 def process_document(file, filename, strategy="paragraph"):
-
+    """Extract, chunk, embed, and upsert a document into Qdrant. Returns the new doc_id."""
     doc_id = str(uuid.uuid4())
     text, metadata = extract_text(file, filename)
     content_hash= hashlib.md5(text.encode()).hexdigest()
@@ -130,6 +130,7 @@ def process_document(file, filename, strategy="paragraph"):
     upsert_points(points)
     return doc_id
 def delete_document(doc_id):
+    """Delete all Qdrant points belonging to the given doc_id."""
     client.delete(
         collection_name=COLLECTION_NAME,
         points_selector=FilterSelector(
@@ -140,6 +141,7 @@ def delete_document(doc_id):
     )   
 
 def list_documents():
+    """Return a list of uploaded documents (doc_id, name, upload_date), deduped by doc_id."""
     points, _ = client.scroll(
         collection_name=COLLECTION_NAME,
         scroll_filter=Filter(

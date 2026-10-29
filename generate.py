@@ -43,6 +43,7 @@ tools = [
 max_iterations = MAX_TOOL_ROUNDS
 
 def search_documents(question, start, collection_name=COLLECTION_NAME):
+   """Search the corpus and return formatted context string and raw hits."""
    hits = hybrid_search(question, collection_name=collection_name)
    if hits is None:
       context = "Search failed"
@@ -52,6 +53,7 @@ def search_documents(question, start, collection_name=COLLECTION_NAME):
    
 
 def build_context(hits, offset):
+    """Format hits into numbered text blocks for the LLM prompt. Offset sets the starting citation number."""
     context = []
     for i, hit in enumerate(hits, start = offset):
       chunk = f"[{i}] Title: {hit.payload.get('title', hit.payload.get('name', ''))}\n {hit.payload['text']}"
@@ -60,7 +62,7 @@ def build_context(hits, offset):
                                 
 
 def answer(question, collection_name=COLLECTION_NAME):
-
+    """Run the full RAG pipeline: tool-calling loop with search, then LLM answer. Returns (answer_text, all_hits)."""
     messages = [
     {"role": "system", "content": SYSTEM_PROMPT},  
     {"role": "user", "content": question},   
