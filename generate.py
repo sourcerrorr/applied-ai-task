@@ -8,7 +8,9 @@ from config import MAX_TOOL_ROUNDS, COLLECTION_NAME
 
 
 #system prompt
-SYSTEM_PROMPT = ("To answer the provided question use the search tool provided. "
+SYSTEM_PROMPT = ("You are a document search assistant. Only answer factual questions using the search tool. "
+"If the user's message is not a factual question, respond: 'Please ask a factual question about the documents.' " \
+"To answer the provided question use the search tool provided."
 "If information gathered by the search tool is not enough, search again with a more specific query."
 " Answer only based on the documents retrieved with the search tool."
 " If the answer is not in the documents, you do not know it, even if you believe you know it. "
@@ -68,20 +70,27 @@ def answer(question, collection_name=COLLECTION_NAME):
           try:  
                 resp = client.chat.completions.create(model=CHAT_MODEL, messages=messages, reasoning_effort="none", tools=tools) 
                 if resp.choices[0].finish_reason == "tool_calls":
+
                   record(resp.usage)
                   response = resp.choices[0].message
-                  tool_calls = resp.choices[0].message.tool_calls[0]
-                  tool_call_id = tool_calls.id 
-                  question = json.loads(tool_calls.function.arguments)["question"]  
-                  context_string, hits = search_documents(question, len(all_hits) + 1, collection_name=collection_name) 
-                  all_hits.extend(hits)
+                  tool_calls = resp.choices[0].message.tool_calls 
                   messages.append(response)
-                  messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": context_string})  
+
+                  for tool_call in tool_calls:
+                     tool_call_id = tool_call.id
+                     tool_query = json.loads(tool_call.function.arguments)["question"]  
+                     context_string, hits = search_documents(tool_query, len(all_hits) + 1, collection_name=collection_name)
+                     all_hits.extend(hits)
+                     messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": context_string})  
+
                 elif resp.choices[0].finish_reason == "stop":
+                  break
+                else:
                   break
           except openai.OpenAIError as e:
             print(str(e))
             return("The answer could not be generated. Please try again.", all_hits)
+          
     if resp.choices[0].finish_reason != "stop":
       try:
         resp1 = client.chat.completions.create(model=CHAT_MODEL, messages=messages, reasoning_effort="none")

@@ -1,10 +1,15 @@
-import pytest
-from retrieval import rrf, tokenize
-from generate import build_context
-from eval_test import recall_at_k, reciprocal_rank, token_f1, citation_accuracy
-from usage import record, get_totals, _totals
-from documents import chunk_text
+from unittest.mock import MagicMock, patch
+import sys
 
+# Mock external clients before importing project modules
+with patch.dict("os.environ", {"OPENAI_API_KEY": "fake", "QDRANT_URL": "http://fake", "QDRANT_API_KEY": "fake"}):
+    with patch("openai.OpenAI", return_value=MagicMock()):
+        with patch("qdrant_client.QdrantClient", return_value=MagicMock()):
+            from retrieval import rrf, tokenize
+            from generate import build_context
+            from eval_test import recall_at_k, reciprocal_rank, token_f1, citation_accuracy
+            from documents import chunk_text
+from usage import record, get_totals, _totals
 
 class FakeHit:
     """Mimics a Qdrant hit object with .id and .payload"""
